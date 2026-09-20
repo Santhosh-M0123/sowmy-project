@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>College Voice Agent — Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">📞 College Voice Agent</div>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" data-tab="agents">Agents</button>
+        <button class="tab-btn" data-tab="call-logs">Call Logs</button>
+        <button class="tab-btn" data-tab="telephony-line">Telephony Line</button>
+      </nav>
+    </header>
+
+    <main class="content">
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="tab-panel active">
+        <h1>Dashboard</h1>
+        <div class="cards">
+          <div class="card">
+            <div class="card-label">Total calls</div>
+            <div class="card-value" id="stat-total-calls">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Calls today</div>
+            <div class="card-value" id="stat-calls-today">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Telephony line</div>
+            <div class="card-value" id="stat-line-status">—</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Agent</div>
+            <div class="card-value" id="stat-agent-name">—</div>
+          </div>
+        </div>
+
+        <h2>Recent calls</h2>
+        <table class="table" id="recent-calls-table">
+          <thead>
+            <tr><th>Started</th><th>Caller</th><th>Duration</th><th>Status</th><th>Recording</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty-hint" id="recent-calls-empty" hidden>No calls logged yet.</p>
+      </section>
+
+      <!-- AGENTS -->
+      <section id="agents" class="tab-panel">
+        <h1>Agents</h1>
+        <p class="muted">
+          A single flow agent, no tools or branching — its entire behavior comes
+          from <code>agent/system_prompt.md</code>. Edit it below; the next call
+          picks up your change immediately, no restart needed.
+        </p>
+
+        <div class="field-row">
+          <span class="label">Agent name</span>
+          <span id="agent-name-display">—</span>
+        </div>
+        <div class="field-row">
+          <span class="label">Prompt last updated</span>
+          <span id="agent-prompt-updated">—</span>
+        </div>
+
+        <label class="label" for="system-prompt-editor">System prompt</label>
+        <textarea id="system-prompt-editor" rows="16" spellcheck="false"></textarea>
+        <div class="actions">
+          <button id="save-prompt-btn" class="btn primary">Save</button>
+          <span id="save-prompt-status" class="save-status"></span>
+        </div>
+      </section>
+
+      <!-- CALL LOGS -->
+      <section id="call-logs" class="tab-panel">
+        <h1>Call Logs</h1>
+        <p class="muted">Read from the <code>call_log/</code> directory, newest first.</p>
+        <table class="table" id="call-logs-table">
+          <thead>
+            <tr><th>Started</th><th>Ended</th><th>Duration</th><th>Caller</th><th>Status</th><th>Recording</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="empty-hint" id="call-logs-empty" hidden>No calls logged yet.</p>
+      </section>
+
+      <!-- TELEPHONY LINE -->
+      <section id="telephony-line" class="tab-panel">
+        <h1>Telephony Line</h1>
+        <p class="muted">
+          Purchase the number and attach the agent to it manually from the
+          LiveKit Cloud dashboard, then record the details here.
+        </p>
+
+        <label class="label" for="line-phone-number">Phone number</label>
+        <input id="line-phone-number" type="text" placeholder="+1 555 010 1234" />
+
+        <label class="label" for="line-sip-trunk-id">SIP trunk ID</label>
+        <input id="line-sip-trunk-id" type="text" placeholder="ST_xxxxxxxx" />
+
+        <label class="label" for="line-agent-name">Attached agent name</label>
+        <input id="line-agent-name" type="text" placeholder="college-voice-agent" />
+
+        <label class="label" for="line-status">Status</label>
+        <select id="line-status">
+          <option value="unassigned">Unassigned</option>
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+        </select>
+
+        <label class="label" for="line-notes">Notes</label>
+        <textarea id="line-notes" rows="4"></textarea>
+
+        <div class="actions">
+          <button id="save-line-btn" class="btn primary">Save</button>
+          <span id="save-line-status" class="save-status"></span>
+        </div>
+
+        <div class="field-row">
+          <span class="label">Last updated</span>
+          <span id="line-updated-at">—</span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

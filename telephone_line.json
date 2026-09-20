@@ -1,0 +1,8 @@
+{
+  "phone_number": "",
+  "sip_trunk_id": "",
+  "agent_name": "college-voice-agent",
+  "status": "unassigned",
+  "notes": "Buy the number and attach the agent in the LiveKit Cloud dashboard, then fill this in here (or via the Telephony Line tab) so the UI can show it.",
+  "updated_at": null
+}

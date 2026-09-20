@@ -1,0 +1,4 @@
+livekit-agents[silero]~=1.5
+python-dotenv~=1.0
+Flask~=3.0
+flask-cors~=4.0
