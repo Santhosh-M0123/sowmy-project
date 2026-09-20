@@ -123,6 +123,29 @@ def _first_caller_identity(ctx: JobContext):
     return None
 
 
+def build_transcript(session: AgentSession) -> list[dict]:
+    """Flatten the session's chat history into a plain transcript list.
+
+    Per https://docs.livekit.io/agents/multimodality/text/, ``AgentSession.history``
+    holds a ``ChatContext`` populated as the call progresses; reading it after the
+    session ends gives the full turn-by-turn conversation (user + agent messages).
+    """
+    transcript = []
+    for item in session.history.items:
+        if item.type != "message":
+            continue
+        text = item.text_content
+        if not text:
+            continue
+        transcript.append({
+            "role": item.role,
+            "text": text,
+            "timestamp": datetime.fromtimestamp(item.created_at, tz=timezone.utc).isoformat(),
+            "interrupted": item.interrupted,
+        })
+    return transcript
+
+
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
@@ -149,6 +172,7 @@ async def entrypoint(ctx: JobContext):
         "recording_url": recording_url,
         "egress_id": egress_id,
         "status": "in_progress",
+        "transcripts": [],
         "_started_dt": started_dt,
     }
 
@@ -158,6 +182,7 @@ async def entrypoint(ctx: JobContext):
         log_entry["ended_at"] = ended_dt.isoformat()
         log_entry["duration_seconds"] = round((ended_dt - started_dt).total_seconds(), 1)
         log_entry["status"] = "completed"
+        log_entry["transcripts"] = build_transcript(session)
         write_call_log(log_entry)
 
     ctx.add_shutdown_callback(on_shutdown)

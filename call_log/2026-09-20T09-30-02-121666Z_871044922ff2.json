@@ -1,0 +1,68 @@
+{
+  "call_id": "871044922ff2",
+  "room_name": "console-a1a071c5",
+  "agent_name": "college-voice-agent",
+  "started_at": "2026-09-20T09:30:02.121666+00:00",
+  "ended_at": "2026-09-20T09:31:18.372661+00:00",
+  "duration_seconds": 76.3,
+  "caller": null,
+  "recording_url": "s3://agent-sowmy-project-delete-after-30day/recordings/871044922ff2.ogg",
+  "egress_id": "EG_SWAJftXFu2jZ",
+  "status": "completed",
+  "transcripts": [
+    {
+      "role": "assistant",
+      "text": "Hello! Thank you for calling the college helpdesk. How can I assist you today?",
+      "timestamp": "2026-09-20T09:30:03.518378+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "Hello! ",
+      "timestamp": "2026-09-20T09:30:09.518909+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "Hi there! What can I help you with today? Admissions, fees, exam schedules, or something else?",
+      "timestamp": "2026-09-20T09:30:09.527597+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "I need to create a support ticket",
+      "timestamp": "2026-09-20T09:30:18.072068+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "Sure! Can you please tell me what issue you\u2019re facing? I\u2019ll help you get that ticket created.",
+      "timestamp": "2026-09-20T09:30:18.085636+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "Yup!. I cannot able to login into my system",
+      "timestamp": "2026-09-20T09:30:33.178019+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "I\u2019m sorry to hear that. For login issues, I\u2019ll connect you to our IT support team who can assist you further. Please hold for a moment.",
+      "timestamp": "2026-09-20T09:30:33.193329+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "Oke!",
+      "timestamp": "2026-09-20T09:30:47.418016+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "Thank you for holding. I\u2019m connecting you to IT support now. Have a great day!",
+      "timestamp": "2026-09-20T09:30:47.426449+00:00",
+      "interrupted": false
+    }
+  ]
+}

@@ -84,7 +84,7 @@
         <p class="muted">Read from the <code>call_log/</code> directory, newest first.</p>
         <table class="table" id="call-logs-table">
           <thead>
-            <tr><th>Started</th><th>Ended</th><th>Duration</th><th>Caller</th><th>Status</th><th>Recording</th></tr>
+            <tr><th>Started</th><th>Ended</th><th>Duration</th><th>Caller</th><th>Status</th><th>Recording</th><th>Transcript</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -130,6 +130,16 @@
       </section>
 
     </main>
+  </div>
+
+  <div class="modal-overlay" id="transcript-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="transcript-modal-title">
+      <div class="modal-header">
+        <h2 id="transcript-modal-title">Transcript</h2>
+        <button class="btn-close" id="transcript-modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="transcript-modal-body"></div>
+    </div>
   </div>
 
   <script src="app.js"></script>

@@ -39,6 +39,70 @@ function recordingLink(url) {
   return `<a href="${url}" target="_blank" rel="noopener">recording</a>`;
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+// ------------------------------------------------------ transcript modal --
+
+const transcriptModal = document.getElementById("transcript-modal");
+const transcriptModalBody = document.getElementById("transcript-modal-body");
+const transcriptModalTitle = document.getElementById("transcript-modal-title");
+
+function openTranscriptModal() {
+  transcriptModal.hidden = false;
+}
+
+function closeTranscriptModal() {
+  transcriptModal.hidden = true;
+  transcriptModalBody.innerHTML = "";
+}
+
+document.getElementById("transcript-modal-close").addEventListener("click", closeTranscriptModal);
+transcriptModal.addEventListener("click", (e) => {
+  if (e.target === transcriptModal) closeTranscriptModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !transcriptModal.hidden) closeTranscriptModal();
+});
+
+function renderTranscript(entries) {
+  if (!entries || entries.length === 0) {
+    transcriptModalBody.innerHTML = `<p class="empty-hint">No transcript available for this call.</p>`;
+    return;
+  }
+  transcriptModalBody.innerHTML = entries
+    .map((entry) => `
+      <div class="transcript-line role-${escapeHtml(entry.role || "unknown")}">
+        <div class="transcript-meta">
+          <span class="transcript-role">${escapeHtml(entry.role || "unknown")}</span>
+          <span class="transcript-time">${fmtDate(entry.timestamp)}</span>
+        </div>
+        <div class="transcript-text">${escapeHtml(entry.text || "")}</div>
+      </div>
+    `)
+    .join("");
+}
+
+async function showTranscript(filename, label) {
+  transcriptModalTitle.textContent = label ? `Transcript — ${label}` : "Transcript";
+  transcriptModalBody.innerHTML = `<p class="empty-hint">Loading…</p>`;
+  openTranscriptModal();
+  try {
+    const res = await fetch(`${API}/call-logs/${encodeURIComponent(filename)}/transcript`);
+    if (!res.ok) throw new Error("Failed to load transcript");
+    const data = await res.json();
+    renderTranscript(data.transcripts);
+  } catch (err) {
+    transcriptModalBody.innerHTML = `<p class="empty-hint">${escapeHtml(err.message)}</p>`;
+  }
+}
+
 // ---------------------------------------------------------- dashboard --
 
 async function loadDashboard() {
@@ -121,10 +185,17 @@ async function loadCallLogs() {
       <td>${call.caller || "—"}</td>
       <td>${call.status || "—"}</td>
       <td>${recordingLink(call.recording_url)}</td>
+      <td><button class="btn-link view-transcript-btn" data-file="${escapeHtml(call._file)}" data-label="${escapeHtml(call.caller || call.call_id || "")}">View</button></td>
     `;
     tbody.appendChild(tr);
   }
 }
+
+document.querySelector("#call-logs-table tbody").addEventListener("click", (e) => {
+  const btn = e.target.closest(".view-transcript-btn");
+  if (!btn) return;
+  showTranscript(btn.dataset.file, btn.dataset.label);
+});
 
 // ------------------------------------------------------- telephony line --
 

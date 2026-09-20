@@ -60,13 +60,16 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def _list_call_logs() -> list[dict]:
+def _list_call_logs(include_transcripts: bool = True) -> list[dict]:
     logs = []
     for f in CALL_LOG_DIR.glob("*.json"):
         try:
-            logs.append(json.loads(f.read_text(encoding="utf-8")) | {"_file": f.name})
+            entry = json.loads(f.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
+        if not include_transcripts:
+            entry = {k: v for k, v in entry.items() if k != "transcripts"}
+        logs.append(entry | {"_file": f.name})
     # filenames are timestamp-prefixed, so this also sorts by call order
     logs.sort(key=lambda entry: entry.get("_file", ""), reverse=True)
     return logs
@@ -144,7 +147,9 @@ def update_telephone_line():
 
 @app.get("/api/call-logs")
 def list_call_logs():
-    return jsonify(_list_call_logs())
+    # Transcripts are left out here to keep the list lightweight; fetch a
+    # single call's full record (or just its transcript) on demand below.
+    return jsonify(_list_call_logs(include_transcripts=False))
 
 
 @app.get("/api/call-logs/<path:filename>")
@@ -155,11 +160,23 @@ def get_call_log(filename):
     return jsonify(json.loads(path.read_text(encoding="utf-8")))
 
 
+@app.get("/api/call-logs/<path:filename>/transcript")
+def get_call_log_transcript(filename):
+    path = CALL_LOG_DIR / filename
+    if not path.is_file() or path.suffix != ".json" or path.parent != CALL_LOG_DIR:
+        return jsonify({"error": "not found"}), 404
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    return jsonify({
+        "call_id": entry.get("call_id"),
+        "transcripts": entry.get("transcripts", []),
+    })
+
+
 # --------------------------------------------------------- dashboard summary
 
 @app.get("/api/dashboard/summary")
 def dashboard_summary():
-    logs = _list_call_logs()
+    logs = _list_call_logs(include_transcripts=False)
     today = datetime.utcnow().date().isoformat()
     calls_today = sum(1 for entry in logs if str(entry.get("started_at", "")).startswith(today))
     line = _read_json(TELEPHONE_LINE_FILE, DEFAULT_TELEPHONE_LINE)
