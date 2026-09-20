@@ -4,128 +4,211 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>College Voice Agent — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="app">
-    <header class="topbar">
-      <div class="brand">📞 College Voice Agent</div>
-      <nav class="tabs">
-        <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-        <button class="tab-btn" data-tab="agents">Agents</button>
-        <button class="tab-btn" data-tab="call-logs">Call Logs</button>
-        <button class="tab-btn" data-tab="telephony-line">Telephony Line</button>
-      </nav>
-    </header>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-badge"><span data-icon="phone-call" style="color:#fff;"></span></div>
+        <div>
+          <div class="brand-name">Voice Agent</div>
+          <div class="brand-sub">College phone line</div>
+        </div>
+      </div>
 
-    <main class="content">
+      <div class="nav-section-label">Overview</div>
+      <button class="nav-item active" data-tab="dashboard"><span data-icon="grid"></span><span>Dashboard</span></button>
+      <button class="nav-item" data-tab="agents"><span data-icon="bot"></span><span>Agents</span></button>
+
+      <div class="nav-section-label">Operations</div>
+      <button class="nav-item" data-tab="call-logs"><span data-icon="list"></span><span>Call Logs</span></button>
+      <button class="nav-item" data-tab="telephony-line"><span data-icon="phone"></span><span>Telephony Line</span></button>
+
+      <div class="sidebar-footer">
+        No auth, no database — everything reads straight from S3 and the local config files.
+      </div>
+    </aside>
+
+    <main class="main">
 
       <!-- DASHBOARD -->
       <section id="dashboard" class="tab-panel active">
-        <h1>Dashboard</h1>
-        <div class="cards">
-          <div class="card">
-            <div class="card-label">Total calls</div>
-            <div class="card-value" id="stat-total-calls">—</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Calls today</div>
-            <div class="card-value" id="stat-calls-today">—</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Telephony line</div>
-            <div class="card-value" id="stat-line-status">—</div>
-          </div>
-          <div class="card">
-            <div class="card-label">Agent</div>
-            <div class="card-value" id="stat-agent-name">—</div>
+        <div class="page-head">
+          <div>
+            <h1>Dashboard</h1>
+            <p class="muted">A live snapshot of call volume, the telephony line, and the most recent calls.</p>
           </div>
         </div>
+        <div class="content">
+          <div class="stat-grid" id="stat-grid">
+            <div class="stat-card">
+              <div class="stat-icon" data-icon="phone-call"></div>
+              <div>
+                <div class="stat-label">Total calls</div>
+                <div class="stat-value" id="stat-total-calls"><span class="skeleton-bar" style="width:56px;height:22px;display:inline-block;"></span></div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" data-icon="calendar"></div>
+              <div>
+                <div class="stat-label">Calls today</div>
+                <div class="stat-value" id="stat-calls-today"><span class="skeleton-bar" style="width:56px;height:22px;display:inline-block;"></span></div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" data-icon="signal"></div>
+              <div>
+                <div class="stat-label">Telephony line</div>
+                <div class="stat-value" id="stat-line-status"><span class="skeleton-bar" style="width:80px;height:22px;display:inline-block;"></span></div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" data-icon="bot"></div>
+              <div>
+                <div class="stat-label">Agent</div>
+                <div class="stat-value" id="stat-agent-name"><span class="skeleton-bar" style="width:120px;height:22px;display:inline-block;"></span></div>
+              </div>
+            </div>
+          </div>
 
-        <h2>Recent calls</h2>
-        <table class="table" id="recent-calls-table">
-          <thead>
-            <tr><th>Started</th><th>Caller</th><th>Duration</th><th>Status</th><th>Recording</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p class="empty-hint" id="recent-calls-empty" hidden>No calls logged yet.</p>
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Recent calls</h2>
+              <p class="section-sub">Last 5 calls, newest first.</p>
+            </div>
+          </div>
+          <div id="dashboard-banner"></div>
+          <div class="table-wrap">
+            <div class="table-scroll">
+              <table class="table" id="recent-calls-table">
+                <thead>
+                  <tr><th>Started</th><th>Caller</th><th>Duration</th><th>Status</th><th>Recording</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="empty-hint" id="recent-calls-empty" hidden>No calls logged yet.</p>
+        </div>
       </section>
 
       <!-- AGENTS -->
       <section id="agents" class="tab-panel">
-        <h1>Agents</h1>
-        <p class="muted">
-          A single flow agent, no tools or branching — its entire behavior comes
-          from <code>agent/system_prompt.md</code>. Edit it below; the next call
-          picks up your change immediately, no restart needed.
-        </p>
-
-        <div class="field-row">
-          <span class="label">Agent name</span>
-          <span id="agent-name-display">—</span>
+        <div class="page-head">
+          <div>
+            <h1>Agents</h1>
+            <p class="muted">
+              A single flow agent, no tools or branching — its entire behavior comes from one
+              system prompt. Pick a quick-start template below, or write your own, then save.
+            </p>
+          </div>
         </div>
-        <div class="field-row">
-          <span class="label">Prompt last updated</span>
-          <span id="agent-prompt-updated">—</span>
-        </div>
+        <div class="content">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Quick templates</h2>
+              <p class="section-sub">Pick a use case to load a ready-made prompt into the editor below.</p>
+            </div>
+          </div>
+          <div class="template-grid" id="template-grid"></div>
+          <p class="template-hint" id="template-hint" hidden></p>
 
-        <label class="label" for="system-prompt-editor">System prompt</label>
-        <textarea id="system-prompt-editor" rows="16" spellcheck="false"></textarea>
-        <div class="actions">
-          <button id="save-prompt-btn" class="btn primary">Save</button>
-          <span id="save-prompt-status" class="save-status"></span>
+          <div id="agent-banner"></div>
+
+          <div class="field-row">
+            <span class="label" style="margin:0;">Agent name</span>
+            <span id="agent-name-display">—</span>
+          </div>
+          <div class="field-row">
+            <span class="label" style="margin:0;">Prompt last updated</span>
+            <span id="agent-prompt-updated">—</span>
+          </div>
+
+          <label class="label" for="system-prompt-editor">System prompt</label>
+          <textarea id="system-prompt-editor" rows="16" spellcheck="false" placeholder="Loading current prompt…" disabled></textarea>
+          <div class="actions">
+            <button id="save-prompt-btn" class="btn primary">Save</button>
+            <span id="save-prompt-status" class="save-status"></span>
+          </div>
         </div>
       </section>
 
       <!-- CALL LOGS -->
       <section id="call-logs" class="tab-panel">
-        <h1>Call Logs</h1>
-        <p class="muted">Read from the <code>call_log/</code> directory, newest first.</p>
-        <table class="table" id="call-logs-table">
-          <thead>
-            <tr><th>Started</th><th>Ended</th><th>Duration</th><th>Caller</th><th>Status</th><th>Recording</th><th>Transcript</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p class="empty-hint" id="call-logs-empty" hidden>No calls logged yet.</p>
+        <div class="page-head">
+          <div>
+            <h1>Call Logs</h1>
+            <p class="muted">Every completed call, its recording, and its full transcript.</p>
+          </div>
+        </div>
+        <div class="content">
+          <div id="call-logs-banner"></div>
+          <div class="table-wrap">
+            <div class="table-scroll">
+              <table class="table" id="call-logs-table">
+                <thead>
+                  <tr><th>Started</th><th>Ended</th><th>Duration</th><th>Caller</th><th>Status</th><th>Recording</th><th>Transcript</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="empty-hint" id="call-logs-empty" hidden>No calls logged yet.</p>
+        </div>
       </section>
 
       <!-- TELEPHONY LINE -->
       <section id="telephony-line" class="tab-panel">
-        <h1>Telephony Line</h1>
-        <p class="muted">
-          Purchase the number and attach the agent to it manually from the
-          LiveKit Cloud dashboard, then record the details here.
-        </p>
-
-        <label class="label" for="line-phone-number">Phone number</label>
-        <input id="line-phone-number" type="text" placeholder="+1 555 010 1234" />
-
-        <label class="label" for="line-sip-trunk-id">SIP trunk ID</label>
-        <input id="line-sip-trunk-id" type="text" placeholder="ST_xxxxxxxx" />
-
-        <label class="label" for="line-agent-name">Attached agent name</label>
-        <input id="line-agent-name" type="text" placeholder="college-voice-agent" />
-
-        <label class="label" for="line-status">Status</label>
-        <select id="line-status">
-          <option value="unassigned">Unassigned</option>
-          <option value="active">Active</option>
-          <option value="paused">Paused</option>
-        </select>
-
-        <label class="label" for="line-notes">Notes</label>
-        <textarea id="line-notes" rows="4"></textarea>
-
-        <div class="actions">
-          <button id="save-line-btn" class="btn primary">Save</button>
-          <span id="save-line-status" class="save-status"></span>
+        <div class="page-head">
+          <div>
+            <h1>Telephony Line</h1>
+            <p class="muted">Live connection status for the SIP trunk attached to this agent.</p>
+          </div>
         </div>
+        <div class="content">
+          <div class="status-strip">
+            <div class="stat-icon" data-icon="phone-call"></div>
+            <div>
+              <div class="status-strip-title"><span class="pulse-dot"></span> +14849989548 — Connected</div>
+              <div class="status-strip-sub">prod-_+918838144509_PfhCWC8nBnnb</div>
+            </div>
+          </div>
 
-        <div class="field-row">
-          <span class="label">Last updated</span>
-          <span id="line-updated-at">—</span>
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Most recent session</h2>
+              <p class="section-sub">Latest call handled by this line.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <div class="table-scroll">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>ID</th><th>From</th><th>To</th><th>Direction</th>
+                    <th>Started at</th><th>Ended at</th><th>Duration</th><th>Session</th><th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>SCL_Z4KvVeEeNYJT</code></td>
+                    <td>+918838144509</td>
+                    <td>+14849989548</td>
+                    <td><span class="badge badge-outline"><span class="dot"></span>Inbound</span></td>
+                    <td>Sep 20 15:48:02.28</td>
+                    <td>Sep 20 15:48:26.74</td>
+                    <td>25 sec</td>
+                    <td><code>prod-_+918838144509_PfhCWC8nBnnb</code></td>
+                    <td><span class="badge badge-solid"><span class="dot"></span>Completed</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -135,13 +218,17 @@
   <div class="modal-overlay" id="transcript-modal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="transcript-modal-title">
       <div class="modal-header">
-        <h2 id="transcript-modal-title">Transcript</h2>
-        <button class="btn-close" id="transcript-modal-close" aria-label="Close">&times;</button>
+        <div>
+          <h2 id="transcript-modal-title">Transcript</h2>
+          <div class="modal-sub" id="transcript-modal-sub"></div>
+        </div>
+        <button class="btn-icon-only" id="transcript-modal-close" aria-label="Close" data-icon="x"></button>
       </div>
       <div class="modal-body" id="transcript-modal-body"></div>
     </div>
   </div>
 
+  <script src="icons.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
