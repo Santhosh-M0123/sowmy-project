@@ -2,14 +2,16 @@
 LiveKit voice agent orchestrator for the college phone line.
 
 - A single "flow" Agent (no tools/function-calling) whose entire personality
-  comes from agent/system_prompt.md, re-read fresh at the start of every
-  call so edits made through the dashboard/API take effect immediately.
+  comes from a system prompt stored at the root of the S3 bucket
+  (system_prompt.md), re-read fresh at the start of every call so edits made
+  through the dashboard/API take effect immediately on every worker — local
+  disk isn't shared across LiveKit Cloud workers, so agent/system_prompt.md
+  on disk only works as a local-dev fallback when S3_BUCKET isn't configured.
 - Optionally starts a room-composite (audio) egress recording to S3 for the
   call, if AWS_* / S3_BUCKET env vars are set.
 - Writes one JSON file (call metadata + transcript) per call to S3, under
-  calls/, in the same bucket as recordings — LiveKit Cloud workers have no
-  persistent or shared local disk, so call_log/ on disk only works as a
-  local-dev fallback when S3_BUCKET isn't configured.
+  calls/, in the same bucket as recordings — same local-disk-fallback caveat
+  as the system prompt above.
 
 Run with:  python agent/agent.py dev      (local dev, connects to LiveKit Cloud)
            python agent/agent.py start    (production worker)
@@ -58,10 +60,29 @@ TTS_VOICE = os.getenv("TTS_VOICE", "")
 S3_BUCKET = os.getenv("S3_BUCKET")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 CALLS_S3_PREFIX = "calls/"
+SYSTEM_PROMPT_S3_KEY = "system_prompt.md"
 
 
 def load_system_prompt() -> str:
-    """Read the orchestrator's only configuration file, fresh, every call."""
+    """Read the orchestrator's only configuration file, fresh, every call.
+
+    Lives at the root of the S3 bucket so a prompt saved through the
+    dashboard is picked up immediately by every worker, regardless of which
+    machine it's running on. Falls back to the local agent/system_prompt.md
+    only when S3 isn't configured or the read fails.
+    """
+    if S3_BUCKET:
+        try:
+            body = boto3.client("s3", region_name=AWS_REGION).get_object(
+                Bucket=S3_BUCKET, Key=SYSTEM_PROMPT_S3_KEY
+            )["Body"].read().decode("utf-8")
+            return body.strip() or DEFAULT_PROMPT
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in ("NoSuchKey", "404"):
+                print(f"[agent] loading system prompt from S3 failed, falling back to local file: {exc}")
+        except BotoCoreError as exc:
+            print(f"[agent] loading system prompt from S3 failed, falling back to local file: {exc}")
+
     try:
         text = PROMPT_FILE.read_text(encoding="utf-8").strip()
         return text or DEFAULT_PROMPT

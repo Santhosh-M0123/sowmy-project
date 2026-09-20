@@ -1,15 +1,15 @@
 """
 Local Flask API + static file server for the college voice-agent dashboard.
 
-No database, no auth, no ORM. Config lives on the local file system:
-  agent/system_prompt.md   the agent's only configuration
+No database, no auth, no ORM. The one thing that stays purely local is:
   telephone_line.json      the one telephony line's metadata
 
-Call records (metadata + transcript) live in S3, under calls/ in the same
-bucket as recordings, written there by agent/agent.py when a call ends — this
-API lists/reads them straight from S3 (matching agent.py's storage) when
-S3_BUCKET is set, falling back to call_log/*.json on local disk only for
-local dev without AWS configured.
+The system prompt lives at the root of the S3 bucket (system_prompt.md) and
+call records (metadata + transcript) live under calls/ in the same bucket,
+matching agent/agent.py's storage — this API reads/writes both straight from
+S3 when S3_BUCKET is set, so a prompt edit here is visible to every agent
+worker immediately. Falls back to agent/system_prompt.md and call_log/*.json
+on local disk only for local dev without AWS configured.
 
 Run:  python api/app.py
 Serves the dashboard (web/) and the JSON API on the same port (default 8000).
@@ -37,6 +37,7 @@ WEB_DIR = BASE_DIR / "web"
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET = os.getenv("S3_BUCKET")
 CALLS_S3_PREFIX = "calls/"
+SYSTEM_PROMPT_S3_KEY = "system_prompt.md"
 RECORDING_URL_EXPIRES_IN = 900  # 15 minutes
 
 CALL_LOG_DIR.mkdir(exist_ok=True)
@@ -92,6 +93,53 @@ def _presigned_recording_url(s3_uri: str | None, expires_in: int = RECORDING_URL
     except ClientError as exc:
         print(f"[api] presigning recording URL failed: {exc}")
         return None
+
+
+def _get_system_prompt() -> tuple[str, str | None]:
+    """Returns (content, updated_at_iso). Reads from S3 (bucket root) when
+    configured — seeding it with DEFAULT_PROMPT on first read so the agent
+    and this API always agree on what "the current prompt" is — else falls
+    back to the local agent/system_prompt.md file for local dev.
+    """
+    if S3_BUCKET:
+        s3 = _s3_client()
+        try:
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=SYSTEM_PROMPT_S3_KEY)
+            return obj["Body"].read().decode("utf-8"), obj["LastModified"].isoformat()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in ("NoSuchKey", "404"):
+                raise
+            # First migration to S3-backed prompts: seed from the existing
+            # local file (if any) rather than DEFAULT_PROMPT, so a real,
+            # already-customized prompt isn't silently replaced.
+            seed = PROMPT_FILE.read_text(encoding="utf-8").strip() if PROMPT_FILE.exists() else ""
+            seed = seed or DEFAULT_PROMPT
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=SYSTEM_PROMPT_S3_KEY,
+                Body=seed.encode("utf-8"),
+                ContentType="text/markdown",
+            )
+            return seed, datetime.utcnow().isoformat()
+
+    if not PROMPT_FILE.exists():
+        PROMPT_FILE.write_text(DEFAULT_PROMPT, encoding="utf-8")
+    return (
+        PROMPT_FILE.read_text(encoding="utf-8"),
+        datetime.fromtimestamp(PROMPT_FILE.stat().st_mtime).isoformat(),
+    )
+
+
+def _set_system_prompt(content: str) -> None:
+    if S3_BUCKET:
+        _s3_client().put_object(
+            Bucket=S3_BUCKET,
+            Key=SYSTEM_PROMPT_S3_KEY,
+            Body=content.encode("utf-8"),
+            ContentType="text/markdown",
+        )
+        return
+    PROMPT_FILE.write_text(content, encoding="utf-8")
 
 
 def _valid_call_log_filename(filename: str) -> bool:
@@ -180,12 +228,12 @@ def static_files(filename):
 
 @app.get("/api/system-prompt")
 def get_system_prompt():
-    if not PROMPT_FILE.exists():
-        PROMPT_FILE.write_text(DEFAULT_PROMPT, encoding="utf-8")
-    return jsonify({
-        "content": PROMPT_FILE.read_text(encoding="utf-8"),
-        "updated_at": datetime.fromtimestamp(PROMPT_FILE.stat().st_mtime).isoformat(),
-    })
+    try:
+        content, updated_at = _get_system_prompt()
+    except ClientError as exc:
+        print(f"[api] reading system prompt failed: {exc}")
+        return jsonify({"error": "failed to read system prompt"}), 502
+    return jsonify({"content": content, "updated_at": updated_at})
 
 
 @app.put("/api/system-prompt")
@@ -194,7 +242,11 @@ def update_system_prompt():
     content = body.get("content")
     if not isinstance(content, str) or not content.strip():
         return jsonify({"error": "Body must include a non-empty 'content' string."}), 400
-    PROMPT_FILE.write_text(content, encoding="utf-8")
+    try:
+        _set_system_prompt(content)
+    except ClientError as exc:
+        print(f"[api] saving system prompt failed: {exc}")
+        return jsonify({"error": "failed to save system prompt"}), 502
     return jsonify({"ok": True, "content": content})
 
 
@@ -202,14 +254,15 @@ def update_system_prompt():
 
 @app.get("/api/agent")
 def get_agent():
-    prompt = PROMPT_FILE.read_text(encoding="utf-8") if PROMPT_FILE.exists() else DEFAULT_PROMPT
+    try:
+        content, updated_at = _get_system_prompt()
+    except ClientError as exc:
+        print(f"[api] reading system prompt failed: {exc}")
+        content, updated_at = DEFAULT_PROMPT, None
     return jsonify({
         "agent_name": os.getenv("AGENT_NAME", "college-voice-agent"),
-        "system_prompt_preview": prompt.strip()[:280],
-        "system_prompt_updated_at": (
-            datetime.fromtimestamp(PROMPT_FILE.stat().st_mtime).isoformat()
-            if PROMPT_FILE.exists() else None
-        ),
+        "system_prompt_preview": content.strip()[:280],
+        "system_prompt_updated_at": updated_at,
     })
 
 
