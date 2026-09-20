@@ -34,10 +34,38 @@ function fmtDuration(seconds) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function recordingLink(url) {
-  if (!url) return "—";
-  return `<a href="${url}" target="_blank" rel="noopener">recording</a>`;
+function recordingCell(call) {
+  if (!call.recording_url) return "—";
+  return `<button class="btn-link play-recording-btn" data-file="${escapeHtml(call._file)}">recording</button>`;
 }
+
+async function playRecording(filename, btn) {
+  const originalText = btn.textContent;
+  btn.textContent = "Loading…";
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/call-logs/${encodeURIComponent(filename)}/recording-url`);
+    if (!res.ok) throw new Error((await res.json()).error || "Recording unavailable");
+    const data = await res.json();
+    window.open(data.url, "_blank", "noopener");
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+function wireRecordingButtons(tbodySelector) {
+  document.querySelector(tbodySelector).addEventListener("click", (e) => {
+    const btn = e.target.closest(".play-recording-btn");
+    if (!btn) return;
+    playRecording(btn.dataset.file, btn);
+  });
+}
+
+wireRecordingButtons("#recent-calls-table tbody");
+wireRecordingButtons("#call-logs-table tbody");
 
 function escapeHtml(str) {
   return String(str)
@@ -125,7 +153,7 @@ async function loadDashboard() {
       <td>${call.caller || "—"}</td>
       <td>${fmtDuration(call.duration_seconds)}</td>
       <td>${call.status || "—"}</td>
-      <td>${recordingLink(call.recording_url)}</td>
+      <td>${recordingCell(call)}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -184,7 +212,7 @@ async function loadCallLogs() {
       <td>${fmtDuration(call.duration_seconds)}</td>
       <td>${call.caller || "—"}</td>
       <td>${call.status || "—"}</td>
-      <td>${recordingLink(call.recording_url)}</td>
+      <td>${recordingCell(call)}</td>
       <td><button class="btn-link view-transcript-btn" data-file="${escapeHtml(call._file)}" data-label="${escapeHtml(call.caller || call.call_id || "")}">View</button></td>
     `;
     tbody.appendChild(tr);

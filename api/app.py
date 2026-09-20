@@ -15,6 +15,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import boto3
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -26,6 +28,9 @@ PROMPT_FILE = BASE_DIR / "agent" / "system_prompt.md"
 TELEPHONE_LINE_FILE = BASE_DIR / "telephone_line.json"
 CALL_LOG_DIR = BASE_DIR / "call_log"
 WEB_DIR = BASE_DIR / "web"
+
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+RECORDING_URL_EXPIRES_IN = 900  # 15 minutes
 
 CALL_LOG_DIR.mkdir(exist_ok=True)
 
@@ -58,6 +63,28 @@ def _read_json(path: Path, default: dict) -> dict:
 
 def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _presigned_recording_url(s3_uri: str | None, expires_in: int = RECORDING_URL_EXPIRES_IN) -> str | None:
+    """Turn an ``s3://bucket/key`` recording URI into a short-lived, signed HTTPS
+    URL. Recordings are phone-call audio, so the bucket is kept private rather
+    than made publicly readable; this generates access on demand instead.
+    """
+    if not s3_uri or not s3_uri.startswith("s3://"):
+        return None
+    bucket, _, key = s3_uri.removeprefix("s3://").partition("/")
+    if not bucket or not key:
+        return None
+    try:
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        return s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
+    except ClientError as exc:
+        print(f"[api] presigning recording URL failed: {exc}")
+        return None
 
 
 def _list_call_logs(include_transcripts: bool = True) -> list[dict]:
@@ -170,6 +197,18 @@ def get_call_log_transcript(filename):
         "call_id": entry.get("call_id"),
         "transcripts": entry.get("transcripts", []),
     })
+
+
+@app.get("/api/call-logs/<path:filename>/recording-url")
+def get_call_log_recording_url(filename):
+    path = CALL_LOG_DIR / filename
+    if not path.is_file() or path.suffix != ".json" or path.parent != CALL_LOG_DIR:
+        return jsonify({"error": "not found"}), 404
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    url = _presigned_recording_url(entry.get("recording_url"))
+    if not url:
+        return jsonify({"error": "no recording available"}), 404
+    return jsonify({"url": url, "expires_in": RECORDING_URL_EXPIRES_IN})
 
 
 # --------------------------------------------------------- dashboard summary

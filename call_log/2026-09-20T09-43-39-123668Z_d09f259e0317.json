@@ -1,0 +1,44 @@
+{
+  "call_id": "d09f259e0317",
+  "room_name": "console-43fda8c5",
+  "agent_name": "college-voice-agent",
+  "started_at": "2026-09-20T09:43:39.123668+00:00",
+  "ended_at": "2026-09-20T09:44:29.592488+00:00",
+  "duration_seconds": 50.5,
+  "caller": null,
+  "recording_url": "s3://agent-sowmy-project-delete-after-30day-01/recordings/d09f259e0317.ogg",
+  "egress_id": "EG_2JJpNxUSWLcN",
+  "status": "completed",
+  "transcripts": [
+    {
+      "role": "assistant",
+      "text": "Hello! Thank you for calling. How can I assist you today?",
+      "timestamp": "2026-09-20T09:43:40.637094+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "Hey Ho",
+      "timestamp": "2026-09-20T09:43:51.421498+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "Hi there! How can I help you today?",
+      "timestamp": "2026-09-20T09:43:51.435332+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "user",
+      "text": "I need to create a zendesk ticket",
+      "timestamp": "2026-09-20T09:43:57.644440+00:00",
+      "interrupted": false
+    },
+    {
+      "role": "assistant",
+      "text": "I can help with that. Could you please tell me what issue you\u2019re facing so I can make a ticket for you?",
+      "timestamp": "2026-09-20T09:43:57.654038+00:00",
+      "interrupted": false
+    }
+  ]
+}
