@@ -1,10 +1,15 @@
 """
 Local Flask API + static file server for the college voice-agent dashboard.
 
-No database, no auth, no ORM — everything lives on the file system:
+No database, no auth, no ORM. Config lives on the local file system:
   agent/system_prompt.md   the agent's only configuration
   telephone_line.json      the one telephony line's metadata
-  call_log/*.json          one file per completed call
+
+Call records (metadata + transcript) live in S3, under calls/ in the same
+bucket as recordings, written there by agent/agent.py when a call ends — this
+API lists/reads them straight from S3 (matching agent.py's storage) when
+S3_BUCKET is set, falling back to call_log/*.json on local disk only for
+local dev without AWS configured.
 
 Run:  python api/app.py
 Serves the dashboard (web/) and the JSON API on the same port (default 8000).
@@ -30,6 +35,8 @@ CALL_LOG_DIR = BASE_DIR / "call_log"
 WEB_DIR = BASE_DIR / "web"
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET")
+CALLS_S3_PREFIX = "calls/"
 RECORDING_URL_EXPIRES_IN = 900  # 15 minutes
 
 CALL_LOG_DIR.mkdir(exist_ok=True)
@@ -87,7 +94,35 @@ def _presigned_recording_url(s3_uri: str | None, expires_in: int = RECORDING_URL
         return None
 
 
-def _list_call_logs(include_transcripts: bool = True) -> list[dict]:
+def _valid_call_log_filename(filename: str) -> bool:
+    return bool(filename) and filename.endswith(".json") and "/" not in filename and ".." not in filename
+
+
+def _s3_client():
+    return boto3.client("s3", region_name=AWS_REGION)
+
+
+def _list_call_logs_s3(include_transcripts: bool) -> list[dict]:
+    logs = []
+    try:
+        paginator = _s3_client().get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=CALLS_S3_PREFIX):
+            for obj in page.get("Contents", []):
+                fname = obj["Key"][len(CALLS_S3_PREFIX):]
+                if not _valid_call_log_filename(fname):
+                    continue
+                entry = _read_call_log_s3(fname)
+                if entry is None:
+                    continue
+                if not include_transcripts:
+                    entry = {k: v for k, v in entry.items() if k != "transcripts"}
+                logs.append(entry | {"_file": fname})
+    except ClientError as exc:
+        print(f"[api] listing call logs from S3 failed: {exc}")
+    return logs
+
+
+def _list_call_logs_local(include_transcripts: bool) -> list[dict]:
     logs = []
     for f in CALL_LOG_DIR.glob("*.json"):
         try:
@@ -97,9 +132,36 @@ def _list_call_logs(include_transcripts: bool = True) -> list[dict]:
         if not include_transcripts:
             entry = {k: v for k, v in entry.items() if k != "transcripts"}
         logs.append(entry | {"_file": f.name})
+    return logs
+
+
+def _list_call_logs(include_transcripts: bool = True) -> list[dict]:
+    logs = _list_call_logs_s3(include_transcripts) if S3_BUCKET else _list_call_logs_local(include_transcripts)
     # filenames are timestamp-prefixed, so this also sorts by call order
     logs.sort(key=lambda entry: entry.get("_file", ""), reverse=True)
     return logs
+
+
+def _read_call_log_s3(filename: str) -> dict | None:
+    try:
+        body = _s3_client().get_object(Bucket=S3_BUCKET, Key=f"{CALLS_S3_PREFIX}{filename}")["Body"].read()
+        return json.loads(body)
+    except (ClientError, json.JSONDecodeError):
+        return None
+
+
+def _read_call_log(filename: str) -> dict | None:
+    if not _valid_call_log_filename(filename):
+        return None
+    if S3_BUCKET:
+        return _read_call_log_s3(filename)
+    path = CALL_LOG_DIR / filename
+    if not path.is_file() or path.parent != CALL_LOG_DIR:
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
 
 
 # -------------------------------------------------------------- static UI --
@@ -181,18 +243,17 @@ def list_call_logs():
 
 @app.get("/api/call-logs/<path:filename>")
 def get_call_log(filename):
-    path = CALL_LOG_DIR / filename
-    if not path.is_file() or path.suffix != ".json" or path.parent != CALL_LOG_DIR:
+    entry = _read_call_log(filename)
+    if entry is None:
         return jsonify({"error": "not found"}), 404
-    return jsonify(json.loads(path.read_text(encoding="utf-8")))
+    return jsonify(entry)
 
 
 @app.get("/api/call-logs/<path:filename>/transcript")
 def get_call_log_transcript(filename):
-    path = CALL_LOG_DIR / filename
-    if not path.is_file() or path.suffix != ".json" or path.parent != CALL_LOG_DIR:
+    entry = _read_call_log(filename)
+    if entry is None:
         return jsonify({"error": "not found"}), 404
-    entry = json.loads(path.read_text(encoding="utf-8"))
     return jsonify({
         "call_id": entry.get("call_id"),
         "transcripts": entry.get("transcripts", []),
@@ -201,10 +262,9 @@ def get_call_log_transcript(filename):
 
 @app.get("/api/call-logs/<path:filename>/recording-url")
 def get_call_log_recording_url(filename):
-    path = CALL_LOG_DIR / filename
-    if not path.is_file() or path.suffix != ".json" or path.parent != CALL_LOG_DIR:
+    entry = _read_call_log(filename)
+    if entry is None:
         return jsonify({"error": "not found"}), 404
-    entry = json.loads(path.read_text(encoding="utf-8"))
     url = _presigned_recording_url(entry.get("recording_url"))
     if not url:
         return jsonify({"error": "no recording available"}), 404

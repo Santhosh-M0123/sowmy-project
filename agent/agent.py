@@ -6,8 +6,10 @@ LiveKit voice agent orchestrator for the college phone line.
   call so edits made through the dashboard/API take effect immediately.
 - Optionally starts a room-composite (audio) egress recording to S3 for the
   call, if AWS_* / S3_BUCKET env vars are set.
-- Writes one JSON file per call into call_log/ when the call ends, named so
-  a plain directory listing sorts them in call order.
+- Writes one JSON file (call metadata + transcript) per call to S3, under
+  calls/, in the same bucket as recordings — LiveKit Cloud workers have no
+  persistent or shared local disk, so call_log/ on disk only works as a
+  local-dev fallback when S3_BUCKET isn't configured.
 
 Run with:  python agent/agent.py dev      (local dev, connects to LiveKit Cloud)
            python agent/agent.py start    (production worker)
@@ -20,12 +22,15 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 
 from livekit import agents, api
 from livekit.agents import (
     Agent,
     AgentSession,
+    CloseEvent,
     JobContext,
     RoomInputOptions,
     WorkerOptions,
@@ -49,6 +54,10 @@ STT_MODEL = os.getenv("STT_MODEL", "cartesia/ink-whisper")
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-4.1-mini")
 TTS_MODEL = os.getenv("TTS_MODEL", "cartesia/sonic-2")
 TTS_VOICE = os.getenv("TTS_VOICE", "")
+
+S3_BUCKET = os.getenv("S3_BUCKET")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+CALLS_S3_PREFIX = "calls/"
 
 
 def load_system_prompt() -> str:
@@ -74,10 +83,30 @@ def _safe_filename_ts(dt: datetime) -> str:
 
 
 def write_call_log(entry: dict) -> None:
+    """Persist the finished call's record (metadata + transcript) to S3, next
+    to its recording. Falls back to call_log/ on local disk only when
+    S3_BUCKET isn't set or the upload fails, so local dev without AWS
+    credentials still works — but the cloud deployment must not depend on
+    that fallback, since worker filesystems there aren't persistent.
+    """
     ts = _safe_filename_ts(entry["_started_dt"])
     fname = f"{ts}_{entry['call_id']}.json"
     entry = {k: v for k, v in entry.items() if not k.startswith("_")}
-    (CALL_LOG_DIR / fname).write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    body = json.dumps(entry, indent=2).encode("utf-8")
+
+    if S3_BUCKET:
+        try:
+            boto3.client("s3", region_name=AWS_REGION).put_object(
+                Bucket=S3_BUCKET,
+                Key=f"{CALLS_S3_PREFIX}{fname}",
+                Body=body,
+                ContentType="application/json",
+            )
+            return
+        except (ClientError, BotoCoreError) as exc:  # noqa: BLE001 - must never crash the call
+            print(f"[agent] call log upload to S3 failed, falling back to local disk: {exc}")
+
+    (CALL_LOG_DIR / fname).write_text(body.decode("utf-8"), encoding="utf-8")
 
 
 async def start_recording(ctx: JobContext, call_id: str):
@@ -172,16 +201,29 @@ async def entrypoint(ctx: JobContext):
         "recording_url": recording_url,
         "egress_id": egress_id,
         "status": "in_progress",
+        "close_reason": None,
+        "error": None,
         "transcripts": [],
         "_started_dt": started_dt,
     }
+
+    def _on_session_close(ev: CloseEvent) -> None:
+        # Fires when AgentSession finishes tearing down (the "session completed"
+        # event); we only capture its reason here since the write itself needs
+        # to happen from an *awaited* hook to guarantee it completes before the
+        # job process exits — ctx.add_shutdown_callback below is that hook.
+        log_entry["close_reason"] = ev.reason.value
+        if ev.error is not None:
+            log_entry["error"] = str(ev.error)
+
+    session.on("close", _on_session_close)
 
     async def on_shutdown():
         ended_dt = datetime.now(timezone.utc)
         log_entry["caller"] = _first_caller_identity(ctx)
         log_entry["ended_at"] = ended_dt.isoformat()
         log_entry["duration_seconds"] = round((ended_dt - started_dt).total_seconds(), 1)
-        log_entry["status"] = "completed"
+        log_entry["status"] = "error" if log_entry.get("close_reason") == "error" else "completed"
         log_entry["transcripts"] = build_transcript(session)
         write_call_log(log_entry)
 
